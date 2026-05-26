@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">HR System</string>
+    <string name="title_activity_main">HR System</string>
+    <string name="package_name">com.hr.app</string>
+    <string name="custom_url_scheme">com.hr.app</string>
+</resources>

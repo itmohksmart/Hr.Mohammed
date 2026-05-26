@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HR-Mohammed</title>
+    <script type="module" crossorigin src="/assets/index-ndQy7Nd3.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DxpDgxDn.css">
+  </head>
+  <body>
+    <script>
+      // Shim global if not present
+      if (typeof window !== 'undefined' && typeof global === 'undefined') {
+        window.global = window;
+      }
+      
+      // Fix for "Cannot set property fetch of #<Window> which has only a getter"
+      // This happens when some libraries try to polyfill fetch in an environment 
+      // where it's already defined as a read-only property.
+      try {
+        const originalFetch = window.fetch;
+        Object.defineProperty(window, 'fetch', {
+          configurable: true,
+          enumerable: true,
+          get: () => originalFetch,
+          set: () => { /* Prevent overwriting */ }
+        });
+      } catch (e) {
+        console.warn('Fetch shim failed, but this might be expected if fetch is already protected.');
+      }
+    </script>
+    <div id="root"></div>
+  </body>
+</html>
+
