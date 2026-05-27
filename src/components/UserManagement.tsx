@@ -39,62 +39,28 @@ export default function UserManagement() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      console.log('Attempting to fetch users...');
-      let userData: UserWithRole[] = [];
+      console.log('Fetching users from /api/admin/list-users...');
+      const response = await fetch('/api/admin/list-users');
       
-      try {
-        const response = await fetch('/api/admin/list-users');
-        if (response.ok) {
-           const contentType = response.headers.get('content-type');
-           if (contentType && contentType.includes('application/json')) {
-              userData = await response.json();
-           }
-        }
-      } catch (e) {
-        console.warn('API fetch failed, falling back to database query', e);
-      }
-
-      // If API failed or returned non-JSON (e.g. on Cloudflare), fallback to database query
-      if (userData.length === 0) {
-        console.log('Fetching user context from database tables...');
-        
-        // Fetch all employees and their roles from the database
-        const { data: employees, error: empError } = await supabase
-          .from('employees')
-          .select('id, email');
-          
-        const { data: roles, error: roleError } = await supabase
-          .from('user_roles')
-          .select('user_id, role');
-
-        if (empError) throw empError;
-
-        // Map roles to employees
-        userData = (employees || []).map(emp => {
-          const roleRecord = roles?.find(r => r.user_id === emp.id);
-          return {
-            id: emp.id,
-            email: emp.email,
-            role: roleRecord?.role || 'employee'
-          };
-        });
-
-        // Also add users from user_roles who might not be in employees table
-        roles?.forEach(role => {
-          if (!userData.find(u => u.id === role.user_id)) {
-            userData.push({
-              id: role.user_id,
-              email: `User ID: ${role.user_id.substring(0, 8)}...`,
-              role: role.role
-            });
-          }
-        });
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Server responded with error:', response.status, errorText);
+        throw new Error(`Server error (${response.status}): ${errorText || 'Unknown error'}`);
       }
       
-      setUsers(userData);
+      const data = await response.json();
+      setUsers(data);
     } catch (error: any) {
-      console.error('Fetch error:', error);
-      toast.error('خطأ في جلب بيانات المستخدمين: ' + error.message);
+      console.error('Fetch error details:', {
+        message: error.message,
+        stack: error.stack,
+        type: error.constructor.name
+      });
+      if (error.message === 'Failed to fetch') {
+         toast.error('لم نتمكن من الاتصال بالخادم. تأكد من تشغيل الخادم بشكل صحيح (server.ts).');
+      } else {
+         toast.error('خطأ في جلب بيانات المستخدمين: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }

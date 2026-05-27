@@ -700,11 +700,6 @@ export default function Employees() {
     try {
       const response = await fetch('/api/admin/list-users');
       if (response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('text/html')) {
-          console.warn('API returned HTML instead of JSON. The backend Express server is likely not running on this static hosting platform (e.g. Cloudflare Pages).');
-          return;
-        }
         const users = await response.json();
         const emails = new Set<string>();
         users.forEach((u: any) => emails.add(u.email));
@@ -1176,11 +1171,6 @@ export default function Employees() {
         }),
       });
 
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('text/html')) {
-        throw new Error('static_html_served');
-      }
-
       const data = await response.json();
 
       if (!response.ok) {
@@ -1195,9 +1185,7 @@ export default function Employees() {
       setIsLoginOpen(false);
       fetchRegisteredUsers();
     } catch (error: any) {
-      if (error.message === 'static_html_served' || error.message.includes('Unexpected token') || error.message.includes('JSON')) {
-        toast.error('رابط Cloudflare يستضيف الملفات الثابتة فقط ولا يقوم بتشغيل خادم الباك إند (Node.js). يرجى فتح رابط المعاينة الكامل للتطبيق لإدارة وإنشاء حسابات الموظفين.', { id: toastId, duration: 8000 });
-      } else if (error.message === 'Failed to fetch') {
+      if (error.message === 'Failed to fetch') {
         toast.error('لم نتمكن من الاتصال بالخادم. تأكد من تشغيل الخادم بشكل صحيح.', { id: toastId });
       } else {
         toast.error('خطأ في إنشاء الحساب: ' + error.message, { id: toastId });
