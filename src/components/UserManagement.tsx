@@ -48,6 +48,11 @@ export default function UserManagement() {
         throw new Error(`Server error (${response.status}): ${errorText || 'Unknown error'}`);
       }
       
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        throw new Error('static_html_served');
+      }
+
       const data = await response.json();
       setUsers(data);
     } catch (error: any) {
@@ -56,7 +61,12 @@ export default function UserManagement() {
         stack: error.stack,
         type: error.constructor.name
       });
-      if (error.message === 'Failed to fetch') {
+      if (error.message === 'static_html_served' || error.message.includes('Unexpected token') || error.message.includes('JSON')) {
+         toast.error(
+           'رابط Cloudflare يستضيف الملفات الثابتة فقط (Vite static SPA) ولا يقوم بتشغيل خادم Node.js (الباك إند). لإدارة المستخدمين وصلاحياتهم بشكل كامل، يرجى استخدام رابط المعاينة المباشر للتطبيق، أو إعداد الحسابات مباشرة من لوحة تحكم Supabase.',
+           { duration: 10000 }
+         );
+      } else if (error.message === 'Failed to fetch') {
          toast.error('لم نتمكن من الاتصال بالخادم. تأكد من تشغيل الخادم بشكل صحيح (server.ts).');
       } else {
          toast.error('خطأ في جلب بيانات المستخدمين: ' + error.message);

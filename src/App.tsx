@@ -23,7 +23,8 @@ import {
   XCircle as XCircleIcon,
   Info,
   Megaphone,
-  AlertTriangle
+  AlertTriangle,
+  Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -310,6 +311,27 @@ export default function App() {
     }
   };
 
+  const clearAllNotifications = async () => {
+    if (!session || notifications.length === 0) return;
+    
+    const confirmClear = window.confirm('هل أنت متأكد من رغبتك في مسح كافة الإشعارات؟');
+    if (!confirmClear) return;
+    
+    const ids = notifications.map(n => n.id);
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .in('id', ids);
+    
+    if (!error) {
+      setNotifications([]);
+      setUnreadCount(0);
+      toast.success('تم مسح جميع الإشعارات بنجاح');
+    } else {
+      toast.error('حدث خطأ أثناء مسح الإشعارات');
+    }
+  };
+
   const handleLeaveAction = async (e: React.MouseEvent, leaveId: string, status: 'approved' | 'rejected', notificationId: string) => {
     e.stopPropagation();
     const success = await processLeaveStatusUpdate(leaveId, status);
@@ -566,16 +588,27 @@ export default function App() {
                     )}
                   </PopoverTrigger>
                   <PopoverContent className="w-80 p-0 rounded-xl border-none shadow-2xl mr-4" align="end" dir="rtl">
-                    <div className="p-4 border-b border-slate-50 dark:border-slate-800 flex items-center justify-between">
+                    <div className="p-4 border-b border-slate-50 dark:border-slate-800 flex items-center justify-between gap-2">
                       <h3 className="font-bold text-sm">الإشعارات</h3>
-                      {unreadCount > 0 && (
-                        <button 
-                          onClick={markAllAsRead}
-                          className="text-[10px] text-blue-600 hover:underline font-bold"
-                        >
-                          تعيين الكل كمقروء
-                        </button>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {unreadCount > 0 && (
+                          <button 
+                            onClick={markAllAsRead}
+                            className="text-[10px] text-blue-600 hover:underline font-bold"
+                          >
+                            تعيين الكل كمقروء
+                          </button>
+                        )}
+                        {notifications.length > 0 && (
+                          <button 
+                            onClick={clearAllNotifications}
+                            className="text-[10px] text-red-600 hover:underline font-bold flex items-center gap-1"
+                          >
+                            <Trash2 size={10} />
+                            تصفير السجل
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="max-h-[300px] overflow-y-auto">
                       {notifications.length === 0 ? (

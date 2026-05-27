@@ -28,51 +28,9 @@ if (supabaseUrl && supabaseServiceKey) {
   }
 }
 
-// Health Check & Connectivity Test
-app.get("/api/health", async (req, res) => {
-  const url = process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
-  
-  let supabaseStatus = "not_configured";
-  let supabaseError = null;
-
-  if (url && key) {
-    try {
-      const adminClient = createClient(url, key, {
-        auth: { autoRefreshToken: false, persistSession: false }
-      });
-      const { error } = await adminClient.from("employees").select("count", { count: 'exact', head: true }).limit(1);
-      if (error) {
-        supabaseStatus = "error";
-        supabaseError = error.message;
-      } else {
-        supabaseStatus = "connected";
-      }
-    } catch (e: any) {
-      supabaseStatus = "exception";
-      supabaseError = e.message;
-    }
-  }
-
-  res.json({ 
-    status: "ok", 
-    time: new Date().toISOString(),
-    config: {
-      hasUrl: !!url,
-      hasServiceKey: !!key,
-      hasAnonKey: !!anonKey,
-      serviceKeyMatchesAnon: key === anonKey && !!key
-    },
-    supabase: {
-      status: supabaseStatus,
-      error: supabaseError
-    }
-  });
-});
-
-app.get("/api/ping", (req, res) => {
-  res.send("pong");
+// Health Check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", supabaseUrl: !!supabaseUrl, supabaseKey: !!supabaseServiceKey });
 });
 
 // API Endpoint to list all users

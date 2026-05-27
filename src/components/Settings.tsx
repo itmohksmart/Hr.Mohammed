@@ -428,9 +428,6 @@ export default function Settings() {
     biometricColumn: boolean;
     earlyExitColumn: boolean;
     employeeNumberColumn: boolean;
-    backendStatus: 'ok' | 'failed' | 'not_checked';
-    supabaseStatus: 'connected' | 'error' | 'not_configured' | 'not_checked';
-    errorDetails: string | null;
     checking: boolean;
   }>({
     settingsTable: true,
@@ -440,71 +437,43 @@ export default function Settings() {
     biometricColumn: true,
     earlyExitColumn: true,
     employeeNumberColumn: true,
-    backendStatus: 'not_checked',
-    supabaseStatus: 'not_checked',
-    errorDetails: null,
     checking: false
   });
 
   const runDiagnostics = async () => {
-    setDiagnosticInfo(prev => ({ ...prev, checking: true, errorDetails: null }));
+    setDiagnosticInfo(prev => ({ ...prev, checking: true }));
     
-    try {
-      // 1. Check Backend Connectivity
-      let bStatus: 'ok' | 'failed' = 'failed';
-      let sStatus: 'connected' | 'error' | 'not_configured' = 'not_configured';
-      let errDetails = null;
+    // Check system_settings table
+    const { error: settingsError } = await supabase.from('system_settings').select('count').limit(1);
+    
+    // Check smart_locations table
+    const { error: smartLocError } = await supabase.from('smart_locations').select('count', { count: 'exact', head: true }).limit(1);
 
-      try {
-        const res = await fetch('/api/health');
-        if (res.ok) {
-          const healthData = await res.json();
-          bStatus = 'ok';
-          sStatus = healthData.supabase?.status || 'not_configured';
-          if (healthData.supabase?.error) errDetails = healthData.supabase.error;
-        }
-      } catch (e: any) {
-        console.error("Backend health check failed:", e);
-        bStatus = 'failed';
-        errDetails = e.message;
-      }
+    // Check employee_smart_locations table
+    const { error: empSmartLocError } = await supabase.from('employee_smart_locations').select('count', { count: 'exact', head: true }).limit(1);
+    
+    // Check attendance_method column in employees
+    const { error: empError } = await supabase.from('employees').select('attendance_method').limit(1);
 
-      // 2. Check Database Tables/Columns via Client SDK
-      const [
-        { error: settingsError },
-        { error: smartLocError },
-        { error: empSmartLocError },
-        { error: empError },
-        { error: bioError },
-        { error: earlyExitError },
-        { error: empNoError }
-      ] = await Promise.all([
-        supabase.from('system_settings').select('count').limit(1),
-        supabase.from('smart_locations').select('count', { count: 'exact', head: true }).limit(1),
-        supabase.from('employee_smart_locations').select('count', { count: 'exact', head: true }).limit(1),
-        supabase.from('employees').select('attendance_method').limit(1),
-        supabase.from('employees').select('biometric_credential_id').limit(1),
-        supabase.from('attendance').select('early_exit_minutes').limit(1),
-        supabase.from('employees').select('employee_number').limit(1)
-      ]);
+    // Check biometric_credential_id column in employees
+    const { error: bioError } = await supabase.from('employees').select('biometric_credential_id').limit(1);
 
-      setDiagnosticInfo({
-        settingsTable: !settingsError,
-        smartLocationsTable: !smartLocError,
-        employeeSmartLocationsTable: !empSmartLocError,
-        attendanceMethodColumn: !empError,
-        biometricColumn: !bioError,
-        earlyExitColumn: !earlyExitError,
-        employeeNumberColumn: !empNoError,
-        backendStatus: bStatus,
-        supabaseStatus: sStatus,
-        errorDetails: errDetails,
-        checking: false
-      });
-    } catch (err: any) {
-      console.error("Diagnostics failure:", err);
-      setDiagnosticInfo(prev => ({ ...prev, checking: false, errorDetails: err.message }));
-    }
+    // Check early_exit_minutes column in attendance
+    const { error: earlyExitError } = await supabase.from('attendance').select('early_exit_minutes').limit(1);
+
+    // Check employee_number column in employees
+    const { error: empNoError } = await supabase.from('employees').select('employee_number').limit(1);
+
+    setDiagnosticInfo({
+      settingsTable: !settingsError,
+      smartLocationsTable: !smartLocError,
+      employeeSmartLocationsTable: !empSmartLocError,
+      attendanceMethodColumn: !empError,
+      biometricColumn: !bioError,
+      earlyExitColumn: !earlyExitError,
+      employeeNumberColumn: !empNoError,
+      checking: false
+    });
   };
 
   useEffect(() => {
@@ -1461,73 +1430,22 @@ export default function Settings() {
       </div>
       {/* Technical Diagnosis Card */}
       <Card id="technical-diagnosis" className="border-none shadow-sm bg-white dark:bg-slate-900 rounded-[24px] overflow-hidden mt-6">
-        <CardHeader className="border-b border-slate-50 dark:border-slate-800 pb-4 flex flex-row items-center justify-between">
+        <CardHeader className="border-b border-slate-50 dark:border-slate-800 pb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-400">
               <RefreshCw size={20} className={diagnosticInfo.checking ? "animate-spin" : ""} />
             </div>
             <div className="flex-1">
-              <CardTitle className="text-lg font-bold">التشخيص الفني والربط (Technical Diagnostics)</CardTitle>
-              <CardDescription className="text-xs">التحقق من حالة الاتصال وقاعدة البيانات</CardDescription>
+              <CardTitle className="text-lg font-bold">التشخيص الفني (Technical Diagnosis)</CardTitle>
+              <CardDescription className="text-xs">التحقق من سلامة جداول قاعدة البيانات</CardDescription>
             </div>
+            <Button variant="outline" size="sm" onClick={runDiagnostics} disabled={diagnosticInfo.checking} className="rounded-lg text-[10px]">
+              تحديث الفحص
+            </Button>
           </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={runDiagnostics} 
-            disabled={diagnosticInfo.checking} 
-            className="rounded-lg text-[10px] h-8 gap-2"
-          >
-            <RefreshCw size={14} className={diagnosticInfo.checking ? "animate-spin" : ""} />
-            تحديث الفحص
-          </Button>
         </CardHeader>
         <CardContent className="pt-6 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-            <div className={`p-4 rounded-2xl border flex flex-col gap-2 ${diagnosticInfo.backendStatus === 'ok' ? 'bg-green-50 border-green-100 dark:bg-green-950/10' : 'bg-red-50 border-red-100 dark:bg-red-950/10'}`}>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">حالة خادم (API)</span>
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${diagnosticInfo.backendStatus === 'ok' ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span className="text-sm font-bold">{diagnosticInfo.backendStatus === 'ok' ? 'متصل' : 'غير متصل'}</span>
-              </div>
-            </div>
-            <div className={`p-4 rounded-2xl border flex flex-col gap-2 ${diagnosticInfo.supabaseStatus === 'connected' ? 'bg-green-50 border-green-100 dark:bg-green-950/10' : (diagnosticInfo.supabaseStatus === 'not_configured' ? 'bg-slate-50 border-slate-100 dark:bg-slate-800/50' : 'bg-red-50 border-red-100 dark:bg-red-950/10')}`}>
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">ربط سوبابيس (Admin)</span>
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${diagnosticInfo.supabaseStatus === 'connected' ? 'bg-green-500' : (diagnosticInfo.supabaseStatus === 'not_configured' ? 'bg-slate-400' : 'bg-red-500')}`} />
-                <span className="text-sm font-bold">
-                  {diagnosticInfo.supabaseStatus === 'connected' ? 'متصل' : 
-                   diagnosticInfo.supabaseStatus === 'not_configured' ? 'غير مهيأ' : 'خطأ في الربط'}
-                </span>
-              </div>
-            </div>
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col gap-2">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">سلامة الجداول</span>
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${diagnosticInfo.settingsTable && diagnosticInfo.smartLocationsTable ? 'bg-green-500' : 'bg-amber-500'}`} />
-                <span className="text-sm font-bold">{(diagnosticInfo.settingsTable && diagnosticInfo.smartLocationsTable) ? 'سليمة' : 'تحتاج تحديث'}</span>
-              </div>
-            </div>
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col gap-2">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">الهيكل البرمجي</span>
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${diagnosticInfo.attendanceMethodColumn && diagnosticInfo.employeeNumberColumn ? 'bg-green-500' : 'bg-amber-500'}`} />
-                <span className="text-sm font-bold">{(diagnosticInfo.attendanceMethodColumn && diagnosticInfo.employeeNumberColumn) ? 'مكتمل' : 'ناقص'}</span>
-              </div>
-            </div>
-          </div>
-
-          {diagnosticInfo.errorDetails && (
-            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-xl flex items-start gap-3">
-              <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
-              <div className="flex-1 overflow-hidden">
-                <p className="text-xs font-bold text-red-700 dark:text-red-400">تفاصيل الخطأ المرصود:</p>
-                <p className="text-[10px] text-red-600 dark:text-red-400/80 mt-1 font-mono break-words">{diagnosticInfo.errorDetails}</p>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className={`p-3 rounded-xl border flex items-center justify-between ${diagnosticInfo.settingsTable ? 'bg-green-50 border-green-100 dark:bg-green-950/10' : 'bg-red-50 border-red-100 dark:bg-red-950/10'}`}>
               <div className="flex flex-col">
                 <span className="text-[11px] font-bold">جدول الإعدادات</span>
