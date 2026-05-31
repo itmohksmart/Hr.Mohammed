@@ -172,19 +172,30 @@ export default function Rewards() {
       if (data && data.length > 0) {
         // If Supabase has data, merge it with localStorage to ensure no data is lost
         const mergedMap = new Map<string, Reward>();
+        
+        // Add local rewards FIRST
         localRewards.forEach(r => mergedMap.set(r.id, r));
+        
+        // Overwrite or add Supabase rewards
         data.forEach(item => {
-          mergedMap.set(item.id, {
-            ...item,
-            employee: employees.find(emp => emp.id === item.employee_id)
-          });
+          mergedMap.set(item.id, item);
         });
         
-        const mergedList = Array.from(mergedMap.values()).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        // Now map ALL merged rewards to current employees
+        const mergedList = Array.from(mergedMap.values())
+          .map(item => ({
+            ...item,
+            employee: employees.find(emp => emp.id === item.employee_id)
+          }))
+          // Optional: filter out completely orphaned records if they look like mocks or if desired
+          // .filter(item => item.employee || !item.id.startsWith('mock-'))
+          .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
         setRewards(mergedList);
         
-        // Update local storage with the merged dataset
-        localStorage.setItem('hr_awards_system', JSON.stringify(mergedList));
+        // Update local storage with the merged dataset (without the employee objects to keep it clean)
+        const storageList = mergedList.map(({ employee, ...rest }) => rest);
+        localStorage.setItem('hr_awards_system', JSON.stringify(storageList));
       } else {
         // Supabase is empty, check if we have local rewards
         if (localRewards.length > 0) {
@@ -194,8 +205,8 @@ export default function Rewards() {
           }));
           setRewards(mapped);
         } else {
-          // If both empty, seed on empty or set empty
-          seedInitialRewards();
+          // If both empty, just set empty
+          setRewards([]);
         }
       }
     } catch (error: any) {
@@ -249,7 +260,7 @@ export default function Rewards() {
       }));
       setRewards(mapped);
     } else {
-      seedInitialRewards();
+      setRewards([]);
     }
   };
 
@@ -375,7 +386,8 @@ export default function Rewards() {
   };
 
   const handleDeleteReward = async (id: string, employeeName: string) => {
-    if (!confirm(`هل أنت متأكد من رغبتك في إلغاء وتصفير هذه المكافأة للموظف: ${employeeName}؟`)) return;
+    const displayName = employeeName || `السجل (${id.substring(0, 8)})`;
+    if (!confirm(`هل أنت متأكد من رغبتك في إلغاء وتصفير هذه المكافأة: ${displayName}؟`)) return;
 
     // 1. Delete from local storage immediately first to ensure persistence
     const localData = localStorage.getItem('hr_awards_system');
@@ -396,16 +408,16 @@ export default function Rewards() {
         .delete()
         .eq('id', id);
 
-      if (!error) {
-        toast.success('تم حذف المكافأة بنجاح من نظام السحابة والذاكرة');
-        fetchRewards();
+      if (error) {
+        toast.error('حدث خطأ أثناء الحذف من السحابة: ' + error.message);
         return;
       }
-    } catch (err) {
+      
+      toast.success('تم حذف المكافأة بنجاح من نظام السحابة والذاكرة');
+    } catch (err: any) {
       console.warn('Backend database rewards table missing on delete, fallback to local storage:', err);
+      toast.info('تم الحذف محلياً فقط (قاعدة البيانات غير متوفرة)');
     }
-    
-    toast.success('تم حذف المكافأة بنجاح من الذاكرة المحلية');
   };
 
   const exportToExcel = () => {
@@ -644,12 +656,15 @@ GRANT ALL ON TABLE public.rewards TO service_role;`;
   const employeeTotals: Record<string, { name: string; total: number; count: number }> = {};
   currentMonthRewards.forEach(r => {
     const empId = r.employee_id;
-    const name = r.employee?.name || 'غير معروف';
-    if (!employeeTotals[empId]) {
-      employeeTotals[empId] = { name, total: 0, count: 0 };
+    // Only count if employee is known, or skip if orphaned
+    if (r.employee) {
+      const name = r.employee.name;
+      if (!employeeTotals[empId]) {
+        employeeTotals[empId] = { name, total: 0, count: 0 };
+      }
+      employeeTotals[empId].total += r.amount;
+      employeeTotals[empId].count += 1;
     }
-    employeeTotals[empId].total += r.amount;
-    employeeTotals[empId].count += 1;
   });
 
   const topHonored = Object.values(employeeTotals).reduce((max: any, curr) => {
@@ -925,8 +940,8 @@ GRANT ALL ON TABLE public.rewards TO service_role;`;
                     <TableCell className="text-slate-500 font-mono text-xs">{i + 1}</TableCell>
                     <TableCell className="font-bold text-slate-900 dark:text-slate-100">
                       <div className="flex flex-col">
-                        <span>{reward.employee?.name || reward.employee_id}</span>
-                        <span className="text-[10px] text-slate-400 font-normal">{reward.employee?.email}</span>
+                        <span>{reward.employee?.name || `سجل غير مرتبط بموظف (${reward.employee_id.substring(0, 8)}...)`}</span>
+                        <span className="text-[10px] text-slate-400 font-normal">{reward.employee?.email || 'معرف الموظف: ' + reward.employee_id}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-xs text-slate-600 dark:text-slate-400">
