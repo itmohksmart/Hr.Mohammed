@@ -169,45 +169,23 @@ export default function Rewards() {
 
       setIsTableMissing(false);
 
-      if (data && data.length > 0) {
-        // If Supabase has data, merge it with localStorage to ensure no data is lost
-        const mergedMap = new Map<string, Reward>();
+      if (data) {
+        setIsTableMissing(false);
+        const mapped = data.map(item => ({
+          ...item,
+          employee: employees.find(emp => emp.id === item.employee_id)
+        }));
         
-        // Add local rewards FIRST
-        localRewards.forEach(r => mergedMap.set(r.id, r));
+        setRewards(mapped);
         
-        // Overwrite or add Supabase rewards
-        data.forEach(item => {
-          mergedMap.set(item.id, item);
-        });
-        
-        // Now map ALL merged rewards to current employees
-        const mergedList = Array.from(mergedMap.values())
-          .map(item => ({
-            ...item,
-            employee: employees.find(emp => emp.id === item.employee_id)
-          }))
-          // Optional: filter out completely orphaned records if they look like mocks or if desired
-          // .filter(item => item.employee || !item.id.startsWith('mock-'))
-          .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        
-        setRewards(mergedList);
-        
-        // Update local storage with the merged dataset (without the employee objects to keep it clean)
-        const storageList = mergedList.map(({ employee, ...rest }) => rest);
+        // Authority: Mirror Supabase records to local storage. 
+        // This ensures that if a record was deleted from Supabase (e.g. by an Admin), 
+        // it will also be removed from this user's local storage upon next fetch.
+        const storageList = data.map(({ employee, ...rest }) => rest);
         localStorage.setItem('hr_awards_system', JSON.stringify(storageList));
       } else {
-        // Supabase is empty, check if we have local rewards
-        if (localRewards.length > 0) {
-          const mapped = localRewards.map(item => ({
-            ...item,
-            employee: employees.find(emp => emp.id === item.employee_id)
-          }));
-          setRewards(mapped);
-        } else {
-          // If both empty, just set empty
-          setRewards([]);
-        }
+        // Fallback to local storage only if we have NO data from Supabase (e.g. offline/error)
+        loadFromLocalStorage();
       }
     } catch (error: any) {
       console.error('Supabase query failed, falling back to client-side storage:', error);
