@@ -194,11 +194,15 @@ export default function Payroll() {
         }
       }
 
-      // Absent days
+      // 1. Absent days (Full daily rate deduction)
       const absentDays = empAttendance.filter(r => r.status === 'absent');
+      const fullyPenalizedDates = new Set<string>();
+
       if (absentDays.length > 0 && isAutoAbsenceEnabled) {
         const amount = absentDays.length * dailyRate;
         empDeductionTotal += amount;
+        absentDays.forEach(r => fullyPenalizedDates.add(r.date));
+        
         reasons.push({
           reason: 'غياب كامل',
           amount: Math.round(amount),
@@ -206,12 +210,73 @@ export default function Payroll() {
         });
       }
 
-      // Missing checkout/checkin
-      const missingRecords = empAttendance.filter(r => r.status === 'missing_checkout' || r.status === 'missing_checkin');
-      
+      // 2. Missing checkout/checkin (Special Policy Deduction)
+      const missingRecords = empAttendance.filter(r => {
+        // Pre-filtered: ignore if already marked as absent
+        if (fullyPenalizedDates.has(r.date)) return false;
+
+        // Explicit statuses
+        if (r.status === 'missing_checkout' || r.status === 'missing_checkin') return true;
+        
+        // Dynamic detection: if past day and one side is missing
+        const isPast = r.date < new Date().toISOString().split('T')[0];
+        if (isPast) {
+          if (r.check_in && !r.check_out && (r.status === 'present' || r.status === 'late')) return true;
+          if (!r.check_in && r.check_out && (r.status === 'present' || r.status === 'late')) return true;
+        }
+        
+        return false;
+      });
+
       if (isAutoHourEnabled) {
-        // Late calculation
-        const lateRecords = empAttendance.filter(r => r.status === 'late' && r.late_minutes && r.late_minutes > 0);
+        // Process Missing Records FIRST to identify dates that become "Absence equivalent"
+        missingRecords.forEach(record => {
+          const isCheckout = record.status === 'missing_checkout' || (record.check_in && !record.check_out);
+          const policy = isCheckout ? settings.missingCheckoutPolicy : settings.missingCheckinPolicy;
+          const dedHours = isCheckout ? settings.missingCheckoutDeductionHours : settings.missingCheckinDeductionHours;
+          const reasonPrefix = isCheckout ? 'نسيان بصمة انصراف' : 'نسيان بصمة حضور';
+
+          let amount = 0;
+          let reasonLabel = '';
+
+          if (policy === 'deduct_hours') {
+            amount = dedHours * hourlyRate;
+            reasonLabel = `${reasonPrefix} (خصم ${dedHours} ساعة)`;
+          } else if (policy === 'half_day') {
+            amount = dailyRate / 2;
+            reasonLabel = `${reasonPrefix} (خصم نصف يوم)`;
+            fullyPenalizedDates.add(record.date); // Mark as penalized to avoid minute-based double-dip
+          } else if (policy === 'full_absence') {
+            amount = dailyRate;
+            reasonLabel = `${reasonPrefix} (خصم يوم كامل)`;
+            fullyPenalizedDates.add(record.date); // Mark as fully penalized
+          }
+
+          if (amount > 0) {
+            empDeductionTotal += amount;
+            const existingReason = reasons.find(r => r.reason === reasonLabel);
+            if (existingReason) {
+              existingReason.amount += Math.round(amount);
+              existingReason.days.push(record.date);
+            } else {
+              reasons.push({
+                reason: reasonLabel,
+                amount: Math.round(amount),
+                days: [record.date]
+              });
+            }
+          }
+        });
+
+        // 3. Late calculation (Minute-based)
+        // Skip dates already handled by "Full Absence" or "Half Day" missing punch policies
+        const lateRecords = empAttendance.filter(r => 
+          r.status === 'late' && 
+          r.late_minutes && 
+          r.late_minutes > 0 &&
+          !fullyPenalizedDates.has(r.date)
+        );
+        
         let totalLateMinutes = 0;
         let lateDates: string[] = [];
         
@@ -234,8 +299,13 @@ export default function Payroll() {
           }
         }
 
-        // Early Exit calculation
-        const earlyExitRecords = empAttendance.filter(r => r.early_exit_minutes && r.early_exit_minutes > 0);
+        // 4. Early Exit calculation (Minute-based)
+        const earlyExitRecords = empAttendance.filter(r => 
+          r.early_exit_minutes && 
+          r.early_exit_minutes > 0 &&
+          !fullyPenalizedDates.has(r.date)
+        );
+        
         let totalEarlyExitMinutes = 0;
         let earlyExitDates: string[] = [];
         
@@ -257,44 +327,8 @@ export default function Payroll() {
             });
           }
         }
-
-        missingRecords.forEach(record => {
-          const isCheckout = record.status === 'missing_checkout';
-          const policy = isCheckout ? settings.missingCheckoutPolicy : settings.missingCheckinPolicy;
-          const dedHours = isCheckout ? settings.missingCheckoutDeductionHours : settings.missingCheckinDeductionHours;
-          const reasonPrefix = isCheckout ? 'نسيان بصمة انصراف' : 'نسيان بصمة حضور';
-
-          let amount = 0;
-          let reasonLabel = '';
-
-          if (policy === 'deduct_hours') {
-            amount = dedHours * hourlyRate;
-            reasonLabel = `${reasonPrefix} (خصم ${dedHours} ساعة)`;
-          } else if (policy === 'half_day') {
-            amount = dailyRate / 2;
-            reasonLabel = `${reasonPrefix} (خصم نصف يوم)`;
-          } else if (policy === 'full_absence') {
-            amount = dailyRate;
-            reasonLabel = `${reasonPrefix} (خصم يوم كامل)`;
-          }
-
-          if (amount > 0) {
-            empDeductionTotal += amount;
-            // Group by reason label
-            const existingReason = reasons.find(r => r.reason === reasonLabel);
-            if (existingReason) {
-              existingReason.amount += Math.round(amount);
-              existingReason.days.push(record.date);
-            } else {
-              reasons.push({
-                reason: reasonLabel,
-                amount: Math.round(amount),
-                days: [record.date]
-              });
-            }
-          }
-        });
       }
+
 
       totalDeductions[emp.id] = Math.round(empDeductionTotal);
       deductionReasons[emp.id] = reasons;

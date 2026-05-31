@@ -1133,7 +1133,7 @@ GRANT ALL ON TABLE public.rewards TO service_role;`;
               style={{ fontFamily: 'Cairo, sans-serif' }}
             >
               <h2 className="text-amber-800 text-lg font-black tracking-widest">شهادة تميز وتقدير</h2>
-              <p className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">الجمهورية العراقية - المؤسسة العامة لإدارة الموارد البشرية</p>
+              <p className="text-[10px] text-amber-500 font-bold uppercase tracking-wider">شركة قلعة الطارق - مشروع التحول الذكي للشبكة الكهربائية في الكوت</p>
               
               <div className="h-0.5 w-16 bg-amber-500/40 mx-auto" />
               
