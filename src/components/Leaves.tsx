@@ -509,12 +509,14 @@ export default function Leaves() {
         </div>
 
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-primary hover:bg-primary/90 text-white dark:text-white rounded-2xl h-11 px-6 text-sm font-bold shadow-lg shadow-primary/20 transition-all active:scale-95 flex items-center gap-2 border-none">
-              <Plus size={18} />
-              تقديم طلب جديد
-            </Button>
-        </DialogTrigger>
+          <DialogTrigger
+            render={
+              <Button className="bg-primary hover:bg-primary/90 text-white dark:text-white rounded-2xl h-11 px-6 text-sm font-bold shadow-lg shadow-primary/20 transition-all active:scale-95 flex items-center gap-2 border-none">
+                <Plus size={18} />
+                تقديم طلب جديد
+              </Button>
+            }
+          />
           <DialogContent className="sm:max-w-md p-6 sm:p-8 bg-white dark:bg-[#1a1a1c] border-none shadow-2xl rounded-[32px] overflow-hidden" dir="rtl">
             <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-16 translate-x-16 blur-3xl opacity-50" />
             <DialogHeader className="relative z-10 mb-6">

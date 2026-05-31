@@ -146,3 +146,13 @@ export interface OrgNode {
   employee?: Employee;
   layout?: 'horizontal' | 'vertical';
 }
+
+export interface Reward {
+  id: string;
+  employee_id: string;
+  amount: number;
+  reason: string;
+  date: string;
+  created_at: string;
+  employee?: Employee;
+}

@@ -53,9 +53,11 @@ export default function Settings() {
   const [isResettingAttendance, setIsResettingAttendance] = useState(false);
   const [isResettingLeaves, setIsResettingLeaves] = useState(false);
   const [isResettingPayroll, setIsResettingPayroll] = useState(false);
+  const [isResettingNotifications, setIsResettingNotifications] = useState(false);
   const [isResetAttendanceModalOpen, setIsResetAttendanceModalOpen] = useState(false);
   const [isResetLeavesModalOpen, setIsResetLeavesModalOpen] = useState(false);
   const [isResetPayrollModalOpen, setIsResetPayrollModalOpen] = useState(false);
+  const [isResetNotificationsModalOpen, setIsResetNotificationsModalOpen] = useState(false);
   
   const [attendanceResetMode, setAttendanceResetMode] = useState<'all' | 'period'>('all');
   const [attendanceStartDate, setAttendanceStartDate] = useState('');
@@ -65,6 +67,10 @@ export default function Settings() {
   const [leavesStartDate, setLeavesStartDate] = useState('');
   const [leavesEndDate, setLeavesEndDate] = useState('');
 
+  const [notificationsResetMode, setNotificationsResetMode] = useState<'all' | 'period'>('all');
+  const [notificationsStartDate, setNotificationsStartDate] = useState('');
+  const [notificationsEndDate, setNotificationsEndDate] = useState('');
+
   const [payrollResetMode, setPayrollResetMode] = useState<'all' | 'month'>('all');
   const [payrollResetMonth, setPayrollResetMonth] = useState(new Date().getMonth() + 1);
   const [payrollResetYear, setPayrollResetYear] = useState(new Date().getFullYear());
@@ -72,6 +78,7 @@ export default function Settings() {
   const [resetAttendanceConfirmText, setResetAttendanceConfirmText] = useState('');
   const [resetLeavesConfirmText, setResetLeavesConfirmText] = useState('');
   const [resetPayrollConfirmText, setResetPayrollConfirmText] = useState('');
+  const [resetNotificationsConfirmText, setResetNotificationsConfirmText] = useState('');
   const [autoDeductionEnabled, setAutoDeductionEnabled] = useState(true);
   const [autoHourDeductionEnabled, setAutoHourDeductionEnabled] = useState(true);
   const [unpaidLeaveEnabled, setUnpaidLeaveEnabled] = useState(false);
@@ -79,6 +86,8 @@ export default function Settings() {
   const [calculateDelayEnabled, setCalculateDelayEnabled] = useState(false);
   const [photoAttendanceEnabled, setPhotoAttendanceEnabled] = useState(false);
   const [allowAttendanceReRegistration, setAllowAttendanceReRegistration] = useState(false);
+  const [liveAttendanceTrackingEnabled, setLiveAttendanceTrackingEnabled] = useState(false);
+  const [advancedNotificationsEnabled, setAdvancedNotificationsEnabled] = useState(false);
   
   const [missingCheckoutPolicy, setMissingCheckoutPolicy] = useState<'alert' | 'deduct_hours' | 'half_day' | 'auto_check' | 'full_absence'>('alert');
   const [missingCheckoutDeductionHours, setMissingCheckoutDeductionHours] = useState(2);
@@ -103,6 +112,8 @@ export default function Settings() {
       setCalculateDelayEnabled(settings.calculateDelayEnabled);
       setPhotoAttendanceEnabled(settings.photoAttendanceEnabled);
       setAllowAttendanceReRegistration(settings.allowAttendanceReRegistration);
+      setLiveAttendanceTrackingEnabled(settings.liveAttendanceTrackingEnabled ?? false);
+      setAdvancedNotificationsEnabled(settings.advancedNotificationsEnabled ?? false);
       setMissingCheckoutPolicy(settings.missingCheckoutPolicy);
       setMissingCheckoutDeductionHours(settings.missingCheckoutDeductionHours);
       setMissingCheckinPolicy(settings.missingCheckinPolicy);
@@ -122,6 +133,8 @@ export default function Settings() {
       if (change.calculateDelayEnabled !== undefined) setCalculateDelayEnabled(change.calculateDelayEnabled);
       if (change.photoAttendanceEnabled !== undefined) setPhotoAttendanceEnabled(change.photoAttendanceEnabled);
       if (change.allowAttendanceReRegistration !== undefined) setAllowAttendanceReRegistration(change.allowAttendanceReRegistration);
+      if (change.liveAttendanceTrackingEnabled !== undefined) setLiveAttendanceTrackingEnabled(change.liveAttendanceTrackingEnabled);
+      if (change.advancedNotificationsEnabled !== undefined) setAdvancedNotificationsEnabled(change.advancedNotificationsEnabled);
       if (change.missingCheckoutPolicy !== undefined) setMissingCheckoutPolicy(change.missingCheckoutPolicy as any);
       if (change.missingCheckoutDeductionHours !== undefined) setMissingCheckoutDeductionHours(change.missingCheckoutDeductionHours);
       if (change.missingCheckinPolicy !== undefined) setMissingCheckinPolicy(change.missingCheckinPolicy as any);
@@ -176,6 +189,31 @@ export default function Settings() {
     setAllowAttendanceReRegistration(checked);
     await updateSystemSetting('allowAttendanceReRegistration', checked);
     toast.success(`تم ${checked ? 'تفعيل' : 'إيقاف'} إمكانية إعادة تسجيل الحضور بنجاح`);
+  };
+
+  const handleToggleLiveAttendanceTracking = async (checked: boolean) => {
+    setLiveAttendanceTrackingEnabled(checked);
+    await updateSystemSetting('liveAttendanceTrackingEnabled', checked);
+    toast.success(`تم ${checked ? 'تفعيل' : 'إيقاف'} ميزة تتبع الحضور المباشر بنجاح`);
+  };
+
+  const handleToggleAdvancedNotifications = async (checked: boolean) => {
+    setAdvancedNotificationsEnabled(checked);
+    await updateSystemSetting('advancedNotificationsEnabled', checked);
+    if (checked) {
+      if ('Notification' in window) {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          toast.success('تم تفعيل الاشعارات المتقدمة بنجاح! سيتم تشغيل التنبيه الصوتي والنوافذ المباشرة');
+        } else {
+          toast.warning('تم تفعيل الاشعارات المتقدمة، ولكن يرجى منح الإذن لعرض النوافذ من إعدادات المتصفح');
+        }
+      } else {
+        toast.info('تم تفعيل الميزة ولكن جهازك/متصفحك لا يدعم نظام الاشعارات النظامي بالكامل. سيتم الاكتفاء بالصوت');
+      }
+    } else {
+      toast.info('تم إيقاف نظام الاشعارات المتقدمة والعودة للنظام الافتراضي');
+    }
   };
 
   const handleUpdateMissingPolicy = async (type: 'checkout' | 'checkin', field: 'policy' | 'hours', value: any) => {
@@ -326,6 +364,38 @@ export default function Settings() {
       toast.error('حدث خطأ أثناء التصفير: ' + err.message, { id: toastId });
     } finally {
       setIsResettingPayroll(false);
+    }
+  };
+
+  const handleResetNotifications = async () => {
+    setIsResettingNotifications(true);
+    const toastId = toast.loading('جاري تصفير سجلات الإشعارات...');
+    try {
+      let query = supabase.from('notifications').delete();
+
+      if (notificationsResetMode === 'period') {
+        if (!notificationsStartDate || !notificationsEndDate) {
+          throw new Error('يرجى تحديد الفترة الزمنية المراد تصفيرها');
+        }
+        query = query.gte('created_at', `${notificationsStartDate}T00:00:00Z`).lte('created_at', `${notificationsEndDate}T23:59:59Z`);
+      } else {
+        query = query.not('id', 'is', null);
+      }
+
+      const { error } = await query;
+      if (error) throw error;
+      
+      toast.success('تم تصفير سجلات الإشعارات لجميع الموظفين بنجاح', { id: toastId });
+      setIsResetNotificationsModalOpen(false);
+      setNotificationsResetMode('all');
+      setNotificationsStartDate('');
+      setNotificationsEndDate('');
+      setResetNotificationsConfirmText('');
+    } catch (err: any) {
+      console.error('Reset notifications error:', err);
+      toast.error('حدث خطأ أثناء التصفير: ' + err.message, { id: toastId });
+    } finally {
+      setIsResettingNotifications(false);
     }
   };
 
@@ -985,6 +1055,20 @@ export default function Settings() {
 
               <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-[16px] border border-slate-100 dark:border-slate-800">
                 <div className="flex flex-col gap-1 pr-2">
+                  <span className="text-sm font-bold text-slate-900 dark:text-slate-100">تتبع الحضور المباشر (تفاصيل دقيقة)</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 max-w-[280px]">
+                    عند التفعيل، تظهر لوحة تتبع مخصصة في تبويب الحضور تمكن الإدارة من مراقبة المنضبطين والمتأخرين لحظياً وعرض عمليات تتبع تفصيلية مفيدة.
+                  </span>
+                </div>
+                <Switch 
+                  checked={liveAttendanceTrackingEnabled} 
+                  onCheckedChange={handleToggleLiveAttendanceTracking}
+                  className="data-[state=checked]:bg-teal-500 mr-4"
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-[16px] border border-slate-100 dark:border-slate-800">
+                <div className="flex flex-col gap-1 pr-2">
                   <span className="text-sm font-bold text-slate-900 dark:text-slate-100">احتساب التأخير تلقائياً</span>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400 max-w-[280px]">
                     عند التفعيل، سيقوم النظام باحتساب دقائق التأخير بناءً على وقت بدء وردية (Shift) كل موظف.
@@ -993,6 +1077,20 @@ export default function Settings() {
                 <Switch 
                   checked={calculateDelayEnabled} 
                   onCheckedChange={handleToggleCalculateDelay}
+                  className="data-[state=checked]:bg-teal-500 mr-4"
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-[16px] border border-slate-100 dark:border-slate-800">
+                <div className="flex flex-col gap-1 pr-2">
+                  <span className="text-sm font-bold text-slate-900 dark:text-slate-100">الاشعارات المتقدمة</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 max-w-[280px]">
+                    عند التفعيل، سيصدر صوت تنبيه وتظهر الإشعارات مباشرة في لوحة إشعارات هاتف الموظف ونظام التشغيل. عند التعطيل، يُكتفى بالإشعارات الافتراضية للتطبيق.
+                  </span>
+                </div>
+                <Switch 
+                  checked={advancedNotificationsEnabled} 
+                  onCheckedChange={handleToggleAdvancedNotifications}
                   className="data-[state=checked]:bg-teal-500 mr-4"
                 />
               </div>
@@ -1421,6 +1519,109 @@ export default function Settings() {
                   >
                     <RefreshCw size={18} className="ml-2" />
                     {isResettingPayroll ? 'جاري الحذف...' : 'احذف كافة مسودات الرواتب الآن'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {/* Reset Notifications */}
+          <div className="bg-red-950/20 border border-red-900/30 rounded-[20px] p-6 hover:bg-red-950/30 transition-all flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center gap-2 text-red-400 font-bold">
+                <h4 className="text-base md:text-lg">تصفير سجلات الإشعارات لجميع الموظفين</h4>
+                <AlertCircle size={16} />
+              </div>
+              <p className="text-xs md:text-sm text-red-400/70 leading-relaxed max-w-3xl">
+                سيؤدي هذا الإجراء إلى حذف كافة سجلات الإشعارات والتنبيهات العامة أو الخاصة المرسلة لجميع الموظفين نهائياً من النظام.
+              </p>
+            </div>
+            
+            <Dialog open={isResetNotificationsModalOpen} onOpenChange={(open) => {
+              setIsResetNotificationsModalOpen(open);
+              if (!open) setResetNotificationsConfirmText('');
+            }}>
+              <DialogTrigger render={
+                <Button 
+                  variant="outline"
+                  className="rounded-xl h-11 px-6 border-red-900/50 bg-red-950/30 text-red-500 hover:bg-red-900/50 hover:text-red-400 font-bold transition-all shrink-0"
+                />
+              }>
+                  <RefreshCw size={16} className="ml-2" />
+                  تصفير الإشعارات
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]" dir="rtl">
+                <DialogHeader className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-red-500">
+                    <AlertCircle size={20} />
+                    <DialogTitle className="text-xl">تأكيد تصفير الإشعارات</DialogTitle>
+                  </div>
+                  <DialogDescription className="text-base text-slate-300 bg-red-950/20 p-4 rounded-xl border border-red-900/30">
+                    هل أنت متأكد تماماً من رغبتك في حذف كافة بيانات وسجلات الإشعارات لجميع الموظفين؟ يرجى أخذ <strong className="text-white">نسخة احتياطية</strong> قبل اتخاذ هذا القرار.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="py-6 space-y-6">
+                  <div className="space-y-3">
+                    <Label className="text-sm font-bold text-slate-200">نوع التصفير:</Label>
+                    <Select value={notificationsResetMode} onValueChange={(val: any) => setNotificationsResetMode(val)}>
+                      <SelectTrigger className="h-12 rounded-xl border-red-900/30 bg-red-950/10 text-red-400">
+                        <SelectValue placeholder="اختر نوع التصفير" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-900 border-slate-800 text-slate-100">
+                        <SelectItem value="all">تصفير كافة السجلات (كامل)</SelectItem>
+                        <SelectItem value="period">تصفير لفترة زمنية محددة</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {notificationsResetMode === 'period' && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -10 }} 
+                      animate={{ opacity: 1, y: 0 }}
+                      className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-red-950/20 border border-red-900/30"
+                    >
+                      <div className="space-y-2">
+                        <Label className="text-xs text-red-400">من تاريخ:</Label>
+                        <Input 
+                          type="date"
+                          value={notificationsStartDate}
+                          onChange={e => setNotificationsStartDate(e.target.value)}
+                          className="h-10 rounded-lg border-red-900/30 bg-red-950/20 text-red-400 animate-in fade-in zoom-in-95 duration-200"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs text-red-400">إلى تاريخ:</Label>
+                        <Input 
+                          type="date"
+                          value={notificationsEndDate}
+                          onChange={e => setNotificationsEndDate(e.target.value)}
+                          className="h-10 rounded-lg border-red-900/30 bg-red-950/20 text-red-400 animate-in fade-in zoom-in-95 duration-200"
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+
+                  <div className="space-y-3">
+                    <Label className="text-sm font-bold text-slate-200">يرجى كتابة كلمة "تصفير" للتأكيد:</Label>
+                    <Input 
+                      value={resetNotificationsConfirmText} 
+                      onChange={e => setResetNotificationsConfirmText(e.target.value)}
+                      className="border-red-900/50 focus-visible:ring-red-500/20 bg-red-950/10 text-red-500 text-center font-black text-xl h-14"
+                      placeholder="تصفير"
+                    />
+                  </div>
+                </div>
+
+                <DialogFooter className="flex-col sm:justify-start">
+                  <Button 
+                    variant="destructive" 
+                    onClick={handleResetNotifications} 
+                    disabled={isResettingNotifications || resetNotificationsConfirmText !== 'تصفير'}
+                    className="rounded-xl w-full h-14 text-base font-bold"
+                  >
+                    <RefreshCw size={18} className="ml-2 animate-preset-fade-in" />
+                    {isResettingNotifications ? 'جاري الحذف...' : 'احذف كافة سجلات الإشعارات الآن'}
                   </Button>
                 </DialogFooter>
               </DialogContent>

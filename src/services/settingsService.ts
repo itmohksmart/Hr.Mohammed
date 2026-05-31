@@ -15,6 +15,8 @@ export interface SystemSettings {
   missingCheckoutDeductionHours: number;
   missingCheckinPolicy: 'alert' | 'deduct_hours' | 'half_day' | 'auto_check' | 'full_absence';
   missingCheckinDeductionHours: number;
+  liveAttendanceTrackingEnabled: boolean;
+  advancedNotificationsEnabled: boolean;
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
@@ -35,7 +37,9 @@ const DEFAULT_SETTINGS: SystemSettings = {
   missingCheckoutPolicy: 'alert',
   missingCheckoutDeductionHours: 2,
   missingCheckinPolicy: 'alert',
-  missingCheckinDeductionHours: 2
+  missingCheckinDeductionHours: 2,
+  liveAttendanceTrackingEnabled: false,
+  advancedNotificationsEnabled: false
 };
 
 export const getSystemSettings = async (): Promise<SystemSettings> => {
@@ -101,8 +105,9 @@ export const updateSystemSetting = async (key: keyof SystemSettings, value: any)
 };
 
 export const subscribeToSettings = (callback: (settings: Partial<SystemSettings>) => void) => {
+  const channelId = `system_settings_changes_${Math.random().toString(36).substring(2, 9)}`;
   return supabase
-    .channel('system_settings_changes')
+    .channel(channelId)
     .on('postgres_changes', { 
       event: '*', 
       schema: 'public', 

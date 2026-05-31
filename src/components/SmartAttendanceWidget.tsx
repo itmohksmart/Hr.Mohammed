@@ -1206,7 +1206,7 @@ export default function SmartAttendanceWidget({
                 : 'bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/10'
               } rounded-[20px] h-14 transition-all duration-300 font-bold border-0 w-full`}
             >
-              {loading ? <Loader2 className="animate-spin ml-2" size={20} /> : ((hasCheckIn && !allowAttendanceReRegistration) ? <Check className="ml-2" size={20} /> : <LogIn className="ml-2" size={20} />)}
+              {loading ? <Loader2 className="animate-spin ml-2" size={20} /> : ((hasCheckIn && !allowAttendanceReRegistration) ? <Check className="ml-2" size={20} /> : <Fingerprint className="ml-2" size={20} />)}
               {hasCheckIn 
                 ? (allowAttendanceReRegistration ? 'إعادة تسجيل حضور' : 'تم تسجيل الحضور') 
                 : 'تسجيل حضور'}

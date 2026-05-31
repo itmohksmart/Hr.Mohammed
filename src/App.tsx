@@ -24,7 +24,9 @@ import {
   Info,
   Megaphone,
   AlertTriangle,
-  Trash2
+  Trash2,
+  Fingerprint,
+  Trophy
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -52,6 +54,7 @@ import Settings from './components/Settings';
 import Shifts from './components/Shifts';
 import OrgChart from './components/OrgChart';
 import LocationTracker from './components/LocationTracker';
+import Rewards from './components/Rewards';
 
 import { ThemeToggle } from './components/ThemeToggle';
 import { processLeaveStatusUpdate } from './lib/leaveActions';
@@ -59,8 +62,99 @@ import { processLeaveStatusUpdate } from './lib/leaveActions';
 import SharedOrgChartViewer from './components/SharedOrgChartViewer';
 import BroadcastModal from './components/BroadcastModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { getSystemSettings, SystemSettings, subscribeToSettings } from './services/settingsService';
 
-type View = 'dashboard' | 'employees' | 'attendance' | 'leaves' | 'payroll' | 'reports' | 'locations' | 'settings' | 'users' | 'shifts' | 'org_chart';
+const playNotificationSound = () => {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    
+    // Play a friendly electronic double-bell chime
+    const playTone = (time: number, freq: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, time);
+      
+      gain.gain.setValueAtTime(0, time);
+      gain.gain.linearRampToValueAtTime(0.15, time + 0.03); // moderate pleasing volume
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start(time);
+      osc.stop(time + duration);
+    };
+    
+    const now = ctx.currentTime;
+    playTone(now, 830.61, 0.4); // Ab5
+    playTone(now + 0.12, 1046.50, 0.5); // C6
+  } catch (e) {
+    console.error('Failed to play notification sound', e);
+  }
+};
+
+const triggerSystemNotification = (title: string, message: string) => {
+  if (typeof window !== 'undefined' && 'Notification' in window) {
+    const WinNotif = (window as any).Notification;
+
+    const displayNotification = () => {
+      const options: any = {
+        body: message,
+        icon: 'https://cdn-icons-png.flaticon.com/512/1077/1077114.png',
+        badge: 'https://cdn-icons-png.flaticon.com/512/1077/1077114.png',
+        vibrate: [200, 100, 200],
+        dir: 'rtl',
+        tag: 'hr-notification-' + Math.floor(Date.now() / 10000),
+        renotify: true
+      };
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready
+          .then((registration) => {
+            registration.showNotification(title, options)
+              .catch((err) => {
+                console.error('ServiceWorker showNotification error, falling back:', err);
+                try {
+                  new WinNotif(title, options);
+                } catch (fallbackErr) {
+                  console.error('Fallback notification failed:', fallbackErr);
+                }
+              });
+          })
+          .catch((swErr) => {
+            console.error('ServiceWorker ready error, falling back:', swErr);
+            try {
+              new WinNotif(title, options);
+            } catch (fallbackErr) {
+              console.error(fallbackErr);
+            }
+          });
+      } else {
+        try {
+          new WinNotif(title, options);
+        } catch (e) {
+          console.error('Traditional notification failed:', e);
+        }
+      }
+    };
+
+    if (WinNotif.permission === 'granted') {
+      displayNotification();
+    } else if (WinNotif.permission !== 'denied') {
+      WinNotif.requestPermission().then((permission: string) => {
+        if (permission === 'granted') {
+          displayNotification();
+        }
+      });
+    }
+  }
+};
+
+type View = 'dashboard' | 'employees' | 'attendance' | 'leaves' | 'payroll' | 'reports' | 'locations' | 'settings' | 'users' | 'shifts' | 'org_chart' | 'rewards';
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
@@ -75,6 +169,34 @@ export default function App() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [activeUrgentAlert, setActiveUrgentAlert] = useState<Notification | null>(null);
+
+  const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
+  const systemSettingsRef = React.useRef<SystemSettings | null>(null);
+  
+  useEffect(() => {
+    systemSettingsRef.current = systemSettings;
+  }, [systemSettings]);
+  const [isAttendanceDropdownOpen, setIsAttendanceDropdownOpen] = useState(false);
+  const [isMobileAttendanceDropdownOpen, setIsMobileAttendanceDropdownOpen] = useState(false);
+  const [attendanceInitialViewMode, setAttendanceInitialViewMode] = useState<'daily' | 'monthly' | 'tracking'>('daily');
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      const s = await getSystemSettings();
+      setSystemSettings(s);
+    };
+    loadSettings();
+
+    const sub = subscribeToSettings((updates) => {
+      setSystemSettings(prev => prev ? { ...prev, ...updates } : null);
+    });
+
+    return () => {
+      if (sub && typeof sub.unsubscribe === 'function') {
+        sub.unsubscribe();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     // If there's no active alert but there is an unread urgent broadcast, show it.
@@ -220,7 +342,13 @@ export default function App() {
             const newNotifs = data.filter(n => !prev.find(p => p.id === n.id));
             if (newNotifs.length > 0) {
               // Toast new notifications
-              newNotifs.forEach(n => toast.info(n.title));
+              newNotifs.forEach(n => {
+                toast.info(n.title);
+                if (systemSettingsRef.current?.advancedNotificationsEnabled) {
+                  playNotificationSound();
+                  triggerSystemNotification(n.title, n.message || '');
+                }
+              });
               return [...newNotifs, ...prev];
             }
             return prev;
@@ -231,34 +359,38 @@ export default function App() {
 
       // Set up realtime subscription for notifications
       const channel = supabase
-        .channel('schema-db-changes')
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'notifications'
-          },
-          (payload) => {
-            const n = payload.new as Notification;
-            const isForMe = n.user_id === session.user.id || 
-                            n.target_role === userRole || 
-                            n.target_role === 'all' || 
-                            n.employee_id === currentEmployeeId;
-                            
-            if (!isForMe) return;
+          .channel('schema-db-changes')
+          .on(
+              'postgres_changes',
+              {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'notifications'
+              },
+              (payload) => {
+                const n = payload.new as Notification;
+                const isForMe = n.user_id === session.user.id || 
+                                n.target_role === userRole || 
+                                n.target_role === 'all' || 
+                                n.employee_id === currentEmployeeId;
+                                
+                if (!isForMe) return;
 
-            setNotifications(prev => {
-              // Prevent duplicates if polling already caught it
-              if (prev.find(p => p.id === n.id)) return prev;
-              
-              setUnreadCount(count => count + 1);
-              toast.info(n.title);
-              return [n, ...prev];
-            });
-          }
-        )
-        .subscribe();
+                setNotifications(prev => {
+                  // Prevent duplicates if polling already caught it
+                  if (prev.find(p => p.id === n.id)) return prev;
+                  
+                  setUnreadCount(count => count + 1);
+                  toast.info(n.title);
+                  if (systemSettingsRef.current?.advancedNotificationsEnabled) {
+                    playNotificationSound();
+                    triggerSystemNotification(n.title, n.message || '');
+                  }
+                  return [n, ...prev];
+                });
+              }
+          )
+          .subscribe();
 
       return () => {
         clearInterval(interval);
@@ -434,10 +566,11 @@ export default function App() {
     { id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard, roles: ['admin', 'hr', 'employee', 'sector_manager'] },
     { id: 'employees', label: 'الموظفين', icon: Users, roles: ['admin', 'hr', 'sector_manager'] },
     { id: 'org_chart', label: 'الهيكل التنظيمي', icon: LayoutGrid, roles: ['admin', 'hr', 'sector_manager'] },
-    { id: 'attendance', label: 'الحضور والغياب', icon: Clock, roles: ['admin', 'hr', 'employee', 'sector_manager'] },
+    { id: 'attendance', label: 'الحضور والغياب', icon: Fingerprint, roles: ['admin', 'hr', 'employee', 'sector_manager'] },
     { id: 'shifts', label: 'الورديات', icon: Clock, roles: ['admin', 'hr'] },
     { id: 'leaves', label: 'الإجازات', icon: Calendar, roles: ['admin', 'hr', 'employee', 'sector_manager'] },
     { id: 'payroll', label: 'الرواتب', icon: CreditCard, roles: ['admin', 'hr', 'employee'] },
+    { id: 'rewards', label: 'المكافآت والجوائز', icon: Trophy, roles: ['admin', 'hr', 'employee', 'sector_manager'] },
     { id: 'reports', label: 'التقارير', icon: BarChart3, roles: ['admin', 'hr', 'sector_manager'] },
     { id: 'locations', label: 'مواقع العمل', icon: MapPin, roles: ['admin', 'hr'] },
     { id: 'users', label: 'إدارة الصلاحيات', icon: Shield, roles: ['admin'] },
@@ -497,20 +630,76 @@ export default function App() {
         </div>
 
         <nav className="flex-1 px-0 space-y-0 mt-4">
-          {filteredNavItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setCurrentView(item.id as View)}
-              className={`w-full flex items-center gap-3 px-6 py-3 transition-all text-sm ${
-                currentView === item.id 
-                  ? 'bg-white/10 text-white border-r-4 border-primary' 
-                  : 'text-[#cbd5e1] hover:bg-white/5'
-              }`}
-            >
-              <item.icon size={18} />
-              {isSidebarOpen && <span>{item.label}</span>}
-            </button>
-          ))}
+          {filteredNavItems.map((item) => {
+            const isAttendance = item.id === 'attendance';
+            const isPrivileged = userRole === 'admin' || userRole === 'hr' || userRole === 'sector_manager';
+            const isTrackingEnabled = systemSettings?.liveAttendanceTrackingEnabled;
+            const hasSubmenu = isAttendance && isTrackingEnabled && isPrivileged;
+
+            return (
+              <div key={item.id} className="flex flex-col">
+                <button
+                  onClick={() => {
+                    if (hasSubmenu) {
+                      setIsAttendanceDropdownOpen(prev => !prev);
+                      setCurrentView('attendance');
+                    } else {
+                      setCurrentView(item.id as View);
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between px-6 py-3 transition-all text-sm ${
+                    currentView === item.id 
+                      ? 'bg-white/10 text-white border-r-4 border-primary font-bold' 
+                      : 'text-[#cbd5e1] hover:bg-white/5'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <item.icon size={18} />
+                    {isSidebarOpen && <span>{item.label}</span>}
+                  </div>
+                  {hasSubmenu && isSidebarOpen && (
+                    <ChevronRight 
+                      size={16} 
+                      className={`text-slate-400 transition-transform duration-200 ${isAttendanceDropdownOpen ? 'rotate-90' : 'rotate-0'}`} 
+                    />
+                  )}
+                </button>
+
+                {/* Submenu for Attendance choices */}
+                {hasSubmenu && isSidebarOpen && isAttendanceDropdownOpen && (
+                  <div className="bg-black/15 flex flex-col py-1 border-r border-[#6366f1]/30">
+                    <button
+                      onClick={() => {
+                        setAttendanceInitialViewMode('daily');
+                        setCurrentView('attendance');
+                      }}
+                      className={`py-2 pr-12 pl-6 text-xs text-right transition-colors ${
+                        currentView === 'attendance' && attendanceInitialViewMode !== 'tracking'
+                          ? 'text-sky-400 font-extrabold'
+                          : 'text-[#cbd5e1] hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      • سجل الحضور والغياب
+                    </button>
+                    <button
+                      onClick={() => {
+                        setAttendanceInitialViewMode('tracking');
+                        setCurrentView('attendance');
+                      }}
+                      className={`py-2 pr-12 pl-6 text-xs text-right transition-colors flex items-center justify-start gap-1.5 ${
+                        currentView === 'attendance' && attendanceInitialViewMode === 'tracking'
+                          ? 'text-emerald-400 font-extrabold'
+                          : 'text-[#cbd5e1] hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <span>• تتبع الحضور المباشر</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-white/10">
@@ -685,10 +874,16 @@ export default function App() {
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           {currentView === 'dashboard' && <Dashboard />}
           {(currentView === 'employees' && (userRole === 'admin' || userRole === 'hr' || userRole === 'sector_manager')) && <Employees />}
-          {currentView === 'attendance' && <Attendance />}
+          {currentView === 'attendance' && (
+            <Attendance 
+              initialViewMode={attendanceInitialViewMode} 
+              onViewModeChange={(mode) => setAttendanceInitialViewMode(mode)} 
+            />
+          )}
           {currentView === 'shifts' && (userRole === 'admin' || userRole === 'hr') && <Shifts />}
           {currentView === 'leaves' && <Leaves />}
           {currentView === 'payroll' && <Payroll />}
+          {currentView === 'rewards' && <Rewards />}
           {(currentView === 'reports' && (userRole === 'admin' || userRole === 'hr' || userRole === 'sector_manager')) && <Reports />}
           {(currentView === 'org_chart' && (userRole === 'admin' || userRole === 'hr' || userRole === 'sector_manager')) && <OrgChart />}
           {(currentView === 'locations' && (userRole === 'admin' || userRole === 'hr')) && <Locations />}
@@ -699,34 +894,108 @@ export default function App() {
 
       {/* Mobile Bottom Navigation */}
       {isMobile && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-100 dark:border-slate-800 px-1 py-2 flex items-center justify-around z-40 shadow-[0_-8px_20px_rgba(0,0,0,0.05)]">
-          {filteredNavItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setCurrentView(item.id as View)}
-              className={`flex flex-col items-center gap-1 flex-1 min-w-0 transition-all duration-300 ${
-                currentView === item.id 
-                  ? 'text-primary scale-105' 
-                  : 'text-slate-400'
-              }`}
-            >
-              <div className={`relative p-1 ${currentView === item.id ? 'after:content-[""] after:absolute after:-bottom-0.5 after:left-1/2 after:-translate-x-1/2 after:w-1 after:h-1 after:bg-primary after:rounded-full' : ''}`}>
-                <item.icon size={18} className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-[2px]'} />
-              </div>
-              <span className={`text-[8px] font-bold truncate w-full text-center transition-opacity duration-300 ${currentView === item.id ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>
-                {item.id === 'dashboard' ? 'الرئيسية' : 
-                 item.id === 'employees' ? 'الموظفين' :
-                 item.id === 'attendance' ? 'الحضور' :
-                 item.id === 'leaves' ? 'الإجازات' : 
-                 item.id === 'payroll' ? 'الرواتب' :
-                 item.id === 'reports' ? 'التقارير' :
-                 item.id === 'locations' ? 'المواقع' :
-                 item.id === 'org_chart' ? 'الهيكل' :
-                 item.id === 'shifts' ? 'الورديات' :
-                 item.id === 'users' ? 'الصلاحيات' : 'الإعدادات'}
-              </span>
-            </button>
-          ))}
+        <div className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-t border-slate-100 dark:border-slate-800 px-1 py-1.5 flex items-center justify-around z-45 shadow-[0_-8px_20px_rgba(0,0,0,0.05)]">
+          {filteredNavItems.map((item) => {
+            const isAttendance = item.id === 'attendance';
+            const isPrivileged = userRole === 'admin' || userRole === 'hr' || userRole === 'sector_manager';
+            const isTrackingEnabled = systemSettings?.liveAttendanceTrackingEnabled;
+            const hasSubmenu = isAttendance && isTrackingEnabled && isPrivileged;
+
+            if (hasSubmenu) {
+              return (
+                <div key={item.id} className="relative flex flex-col items-center flex-1">
+                  <button
+                    onClick={() => {
+                      setIsMobileAttendanceDropdownOpen(prev => !prev);
+                      setCurrentView('attendance');
+                    }}
+                    className={`flex flex-col items-center gap-0.5 w-full transition-all duration-300 ${
+                      currentView === item.id 
+                        ? 'text-[#0ea5e9] scale-105' 
+                        : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-400'
+                    }`}
+                  >
+                    <div className={`relative p-1 ${currentView === item.id ? 'after:content-[""] after:absolute after:-bottom-0.5 after:left-1/2 after:-translate-x-1/2 after:w-1 after:h-1 after:bg-[#0ea5e9] after:rounded-full' : ''}`}>
+                      <item.icon size={18} className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-[2px]'} />
+                    </div>
+                    <span className="text-[9px] font-bold">الحضور</span>
+                  </button>
+
+                  {isMobileAttendanceDropdownOpen && (
+                    <>
+                      {/* Invisible backdrop to dismiss the dropdown when clicking elsewhere */}
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setIsMobileAttendanceDropdownOpen(false)}
+                      />
+                      <div className="absolute bottom-16 left-1/2 -track-x-1/2 -translate-x-1/2 w-48 p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl flex flex-col gap-1 z-50 font-sans">
+                        <button
+                          onClick={() => {
+                            setAttendanceInitialViewMode('daily');
+                            setCurrentView('attendance');
+                            setIsMobileAttendanceDropdownOpen(false);
+                          }}
+                          className={`w-full text-right px-3 py-2.5 text-xs font-bold rounded-xl transition-colors ${
+                            currentView === 'attendance' && attendanceInitialViewMode !== 'tracking'
+                              ? 'bg-slate-100 dark:bg-slate-800 text-[#0ea5e9]' 
+                              : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-800 dark:text-slate-200'
+                          }`}
+                        >
+                          سجل الحضور والغياب
+                        </button>
+                        <button
+                          onClick={() => {
+                            setAttendanceInitialViewMode('tracking');
+                            setCurrentView('attendance');
+                            setIsMobileAttendanceDropdownOpen(false);
+                          }}
+                          className={`w-full text-right px-3 py-2.5 text-xs font-bold rounded-xl transition-colors flex items-center justify-between ${
+                            currentView === 'attendance' && attendanceInitialViewMode === 'tracking'
+                              ? 'bg-slate-100 dark:bg-slate-800 text-emerald-500' 
+                              : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-800 dark:text-slate-200'
+                          }`}
+                        >
+                          <span className="flex items-center gap-1.5 font-bold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
+                            تتبع الحضور المباشر
+                          </span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            }
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => setCurrentView(item.id as View)}
+                className={`flex flex-col items-center gap-0.5 flex-1 min-w-0 transition-all duration-300 ${
+                  currentView === item.id 
+                    ? 'text-[#0ea5e9] scale-105' 
+                    : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-400'
+                }`}
+              >
+                <div className={`relative p-1 ${currentView === item.id ? 'after:content-[""] after:absolute after:-bottom-0.5 after:left-1/2 after:-translate-x-1/2 after:w-1 after:h-1 after:bg-[#0ea5e9] after:rounded-full' : ''}`}>
+                  <item.icon size={18} className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-[2px]'} />
+                </div>
+                <span className={`text-[8px] font-bold truncate w-full text-center transition-opacity duration-300 ${currentView === item.id ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>
+                  {item.id === 'dashboard' ? 'الرئيسية' : 
+                   item.id === 'employees' ? 'الموظفين' :
+                   item.id === 'attendance' ? 'الحضور' :
+                   item.id === 'leaves' ? 'الإجازات' : 
+                   item.id === 'payroll' ? 'الرواتب' :
+                   item.id === 'rewards' ? 'المكافآت' :
+                   item.id === 'reports' ? 'التقارير' :
+                   item.id === 'locations' ? 'المواقع' :
+                   item.id === 'org_chart' ? 'الهيكل' :
+                   item.id === 'shifts' ? 'الورديات' :
+                   item.id === 'users' ? 'الصلاحيات' : 'الإعدادات'}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Users, Clock, Calendar, CreditCard, Bell, ChevronLeft, ArrowUpRight, ArrowDownRight, FileText, CheckCircle2, XCircle, AlertCircle, Download, Activity, Briefcase, TrendingUp, Loader2 } from 'lucide-react';
+import { Users, Clock, Calendar, CreditCard, Bell, ChevronLeft, ArrowUpRight, ArrowDownRight, FileText, CheckCircle2, XCircle, AlertCircle, Download, Activity, Briefcase, TrendingUp, Loader2, Fingerprint } from 'lucide-react';
 import { toast } from 'sonner';
 import { ThemeToggle } from './ThemeToggle';
 import { Leave, Payroll, Attendance as AttendanceType } from '../types';
@@ -257,7 +257,7 @@ export default function Dashboard() {
   const statCards = [
     { title: 'إجمالي الموظفين', value: stats.totalEmployees, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
     { title: 'إجمالي الرواتب (شهرياً)', value: `${stats.totalPayroll.toLocaleString()} د.ع`, icon: CreditCard, color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20' },
-    { title: 'الحضور اليوم', value: stats.presentToday, icon: Clock, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-900/20' },
+    { title: 'الحضور اليوم', value: stats.presentToday, icon: Fingerprint, color: 'text-green-600', bg: 'bg-green-50 dark:bg-green-900/20' },
     { title: 'موظفين في إجازة', value: stats.pendingLeaves, icon: Calendar, color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20' },
   ];
 

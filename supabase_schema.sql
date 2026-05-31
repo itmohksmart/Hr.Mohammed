@@ -404,3 +404,39 @@ ALTER TABLE public.employee_smart_locations ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Admins can view all roles" ON public.user_roles;
 CREATE POLICY "Admins can view all roles" ON public.user_roles FOR SELECT TO authenticated USING (true);
+
+-- 10. Rewards Table
+CREATE TABLE IF NOT EXISTS public.rewards (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    employee_id UUID REFERENCES public.employees(id) ON DELETE CASCADE,
+    amount DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    reason TEXT NOT NULL,
+    date DATE DEFAULT CURRENT_DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
+);
+
+ALTER TABLE public.rewards ENABLE ROW LEVEL SECURITY;
+
+-- Rewards Policies
+DROP POLICY IF EXISTS "Admin/HR can manage rewards" ON public.rewards;
+DROP POLICY IF EXISTS "Employees can view their own rewards" ON public.rewards;
+
+CREATE POLICY "Admin/HR can manage rewards" ON public.rewards 
+FOR ALL 
+TO authenticated 
+USING (
+    (auth.jwt() ->> 'email' IN ('dorgamaltabi@gmail.com', 'mohammedaltai7227@gmail.com')) OR
+    public.check_is_admin() OR 
+    public.check_is_hr()
+)
+WITH CHECK (true);
+
+CREATE POLICY "Employees can view their own rewards" ON public.rewards 
+FOR SELECT 
+TO authenticated 
+USING (
+    employee_id IN (SELECT id FROM public.employees WHERE email = auth.jwt() ->> 'email')
+);
+
+GRANT ALL ON TABLE public.rewards TO authenticated;
+GRANT ALL ON TABLE public.rewards TO service_role;
